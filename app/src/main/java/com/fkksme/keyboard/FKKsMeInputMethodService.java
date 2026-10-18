@@ -229,10 +229,59 @@ public class FKKsMeInputMethodService extends InputMethodService {
         new AlertDialog.Builder(this).setTitle("زیرگونه‌های «"+key+"» — یکی را انتخاب کنید").setView(scroll).setNegativeButton("بستن",null).show();
     }
     void showCalculator(){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); EditText expr=new EditText(this); expr.setSingleLine(true); expr.setHint("مثلاً 12+3*4"); box.addView(expr);
-        TextView result=new TextView(this); result.setTextSize(22*keyboardScale()); box.addView(result);
-        Button calc=new Button(this); calc.setText("محاسبه"); calc.setOnClickListener(v->{try{double value=new ArithmeticParser(expr.getText().toString().replace('×','*').replace('÷','/').replace('−','-')).parse(); result.setText("= "+(value==(long)value?Long.toString((long)value):Double.toString(value)));}catch(Exception e){result.setText("عبارت نامعتبر است");}}); box.addView(calc);
-        new AlertDialog.Builder(this).setTitle("ماشین حساب").setView(box).setPositiveButton("درج نتیجه", (d,w)->{if(getCurrentInputConnection()!=null)getCurrentInputConnection().commitText(result.getText(),1);}).setNegativeButton("بستن",null).show();
+        // A working calculator opened directly by the top-row Tool button.
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(8),dp(6),dp(8),dp(4));
+
+        EditText expr=new EditText(this);
+        expr.setSingleLine(true);
+        expr.setTextSize(24*keyboardScale());
+        expr.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        expr.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        expr.setHint("مثلاً 12+3×4");
+        box.addView(expr,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        TextView result=new TextView(this);
+        result.setText("نتیجه اینجا نمایش داده می‌شود");
+        result.setTextSize(18*keyboardScale());
+        result.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        result.setPadding(dp(6),dp(4),dp(6),dp(4));
+        box.addView(result,new LinearLayout.LayoutParams(-1,dp(38)));
+
+        final String[] keys={"7","8","9","÷","4","5","6","×","1","2","3","−","(","0",")","+","C","⌫",".","="};
+        for(int r=0;r<5;r++){
+            LinearLayout line=row();
+            for(int c=0;c<4;c++){
+                final String key=keys[r*4+c];
+                int color=(key.equals("=")?Color.rgb(190,230,202):(key.equals("C")||key.equals("⌫")?Color.rgb(250,220,225):((key.equals("÷")||key.equals("×")||key.equals("−")||key.equals("+")||key.equals("(")||key.equals(")"))?Color.rgb(219,232,250):Color.rgb(250,249,242))));
+                TextView k=button(key,color,()->{
+                    if(key.equals("C")){expr.setText("");result.setText("");return;}
+                    if(key.equals("⌫")){int pos=expr.getSelectionStart();if(pos>0){expr.getText().delete(pos-1,pos);}result.setText("");return;}
+                    if(key.equals("=")){
+                        try{double value=new ArithmeticParser(expr.getText().toString().replace('×','*').replace('÷','/').replace('−','-')).parse();if(Double.isNaN(value)||Double.isInfinite(value))throw new ArithmeticException();result.setText("= "+(value==(long)value?Long.toString((long)value):Double.toString(value)));}
+                        catch(Exception ex){result.setText("عبارت نامعتبر است");}
+                        return;
+                    }
+                    int pos=expr.getSelectionStart();if(pos<0)pos=expr.length();expr.getText().insert(pos,key);expr.setSelection(Math.min(pos+key.length(),expr.length()));result.setText("");
+                });
+                k.setTextSize(21*keyboardScale());
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(43),1);
+                lp.setMargins(dp(2),dp(2),dp(2),dp(2));line.addView(k,lp);
+            }
+            box.addView(line);
+        }
+
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("ماشین حساب — Tool")
+            .setView(box).setPositiveButton("درج نتیجه",null).setNegativeButton("بستن",null).create();
+        dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String shown=result.getText().toString().trim();
+            if(!shown.startsWith("=")){Toast.makeText(this,"ابتدا عبارت را با دکمهٔ = محاسبه کنید",Toast.LENGTH_SHORT).show();return;}
+            InputConnection ic=getCurrentInputConnection();
+            if(ic!=null)ic.commitText(shown.substring(1).trim(),1);
+            dialog.dismiss();
+        }));
+        dialog.show();
     }
     void runWebsiteControl(boolean upload){
         if(upload){
@@ -263,18 +312,51 @@ public class FKKsMeInputMethodService extends InputMethodService {
         }
     }
     void showMuse(){
-        LinearLayout panel=new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setBackgroundColor(Color.rgb(245,246,250));
-        TextView pad=new TextView(this); pad.setText("میدان لمسی\\nحرکت نشانگر\\n\\nTouchpad for Cursor Movement"); pad.setTextSize(19); pad.setGravity(Gravity.CENTER); pad.setBackground(shape(Color.rgb(235,238,246))); panel.addView(pad,new LinearLayout.LayoutParams(-1,dp(135)));
+        final int panelBg=Color.rgb(245,246,250);
+        LinearLayout panel=new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(2),dp(2),dp(2),dp(2)); panel.setBackgroundColor(panelBg);
+        TextView pad=new TextView(this);
+        pad.setText("میدان لمسی\nحرکت نشانگر\n\nTouchpad for Cursor Movement"); pad.setTextSize(17); pad.setGravity(Gravity.CENTER);
+        pad.setTextColor(Color.rgb(105,111,127)); pad.setBackground(shape(Color.rgb(238,240,247)));
+        panel.addView(pad,new LinearLayout.LayoutParams(-1,dp(150)));
         LinearLayout actions=row();
-        TextView left=button("کلیک چپ",Color.rgb(159,215,233),()->{InputConnection ic=getCurrentInputConnection();if(ic!=null)ic.commitText("",1);});
+        TextView left=button("کلیک چپ\nLeft Click",Color.rgb(159,215,233),()->{
+            InputConnection ic=getCurrentInputConnection();
+            if(ic!=null){ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_DPAD_CENTER));ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_DPAD_CENTER));}
+        });
+        final boolean[] dragging={false};
         TextView drag=button("Drag",Color.rgb(250,238,186),()->{});
-        TextView zoom=button("Point Zoom",Color.rgb(234,176,226),()->Toast.makeText(this,"بزرگ‌نمایی نشانگر",Toast.LENGTH_SHORT).show());
+        final int[] sensitivity={1};
+        TextView zoom=button("Point\nZoom 1×",Color.rgb(234,176,226),()->{});
         TextView close=button("Close",Color.rgb(244,137,95),()->{});
-        for(TextView t:new TextView[]{left,drag,zoom,close}){actions.addView(t,new LinearLayout.LayoutParams(0,dp(52),1));}
+        for(TextView t:new TextView[]{left,drag,zoom,close}){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(54),1);lp.setMargins(dp(1),0,dp(1),0);actions.addView(t,lp);}
         panel.addView(actions);
-        pad.setOnTouchListener(new View.OnTouchListener(){float x,y; public boolean onTouch(View v,MotionEvent e){if(e.getAction()==MotionEvent.ACTION_DOWN){x=e.getX();y=e.getY();return true;} if(e.getAction()==MotionEvent.ACTION_MOVE){pad.setText("میدان لمسی\\nحرکت: "+(int)(e.getX()-x)+", "+(int)(e.getY()-y)+"\\nTouchpad for Cursor Movement");return true;} if(e.getAction()==MotionEvent.ACTION_UP){return true;} return true;}});
+        drag.setOnClickListener(v->{dragging[0]=!dragging[0];drag.setText(dragging[0]?"Drag: ON":"Drag");drag.setBackground(shape(dragging[0]?Color.rgb(235,195,94):Color.rgb(250,238,186)));});
+        zoom.setOnClickListener(v->{sensitivity[0]=sensitivity[0]%3+1;zoom.setText("Point\nZoom "+sensitivity[0]+"×");});
+        pad.setOnTouchListener(new View.OnTouchListener(){
+            float lastX,lastY,accX,accY;
+            void key(InputConnection ic,int code,boolean select){
+                if(ic==null)return;
+                if(select)ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_SHIFT_LEFT));
+                ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,code));
+                ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,code));
+                if(select)ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_SHIFT_LEFT));
+            }
+            public boolean onTouch(View v,MotionEvent e){
+                if(e.getAction()==MotionEvent.ACTION_DOWN){lastX=e.getX();lastY=e.getY();accX=accY=0;pad.setText("میدان لمسی\nحرکت نشانگر\nTouchpad active");return true;}
+                if(e.getAction()==MotionEvent.ACTION_MOVE){
+                    accX+=e.getX()-lastX;accY+=e.getY()-lastY;lastX=e.getX();lastY=e.getY();
+                    int step=Math.max(18,dp(22)/sensitivity[0]);InputConnection ic=getCurrentInputConnection();
+                    int count=0;while(Math.abs(accX)>=step&&count++<8){key(ic,accX>0?android.view.KeyEvent.KEYCODE_DPAD_RIGHT:android.view.KeyEvent.KEYCODE_DPAD_LEFT,dragging[0]);accX+=accX>0?-step:step;}
+                    count=0;while(Math.abs(accY)>=step&&count++<8){key(ic,accY>0?android.view.KeyEvent.KEYCODE_DPAD_DOWN:android.view.KeyEvent.KEYCODE_DPAD_UP,dragging[0]);accY+=accY>0?-step:step;}
+                    return true;
+                }
+                if(e.getAction()==MotionEvent.ACTION_UP){return true;}return true;
+            }
+        });
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Muse — Touchpad").setView(panel).setNegativeButton("بستن",null).create();
-        close.setOnClickListener(v->dialog.dismiss()); drag.setOnClickListener(v->Toast.makeText(this,"حالت Drag",Toast.LENGTH_SHORT).show()); dialog.show();
+        close.setOnClickListener(v->dialog.dismiss());
+        dialog.setOnDismissListener(d->{if(dragging[0]){InputConnection ic=getCurrentInputConnection();if(ic!=null)ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_SHIFT_LEFT));}});
+        dialog.show();
     }
     @Override public void onStartInputView(android.view.inputmethod.EditorInfo info, boolean restarting){super.onStartInputView(info,restarting);}
     @Override public void onFinishInputView(boolean finishingInput) { stopDeleteRepeat(); super.onFinishInputView(finishingInput); }
@@ -288,58 +370,113 @@ public class FKKsMeInputMethodService extends InputMethodService {
         double factor(){if(p<s.length()&&(s.charAt(p)=='+'||s.charAt(p)=='-')){char c=s.charAt(p++);double v=factor();return c=='-'?-v:v;} if(p<s.length()&&s.charAt(p)=='('){p++;double v=expr();if(p>=s.length()||s.charAt(p++)!=')')throw new IllegalArgumentException();return v;}int start=p;while(p<s.length()&&(Character.isDigit(s.charAt(p))||s.charAt(p)=='.'))p++;if(start==p)throw new IllegalArgumentException();return Double.parseDouble(s.substring(start,p));}
     }
     void showEmojiPicker(){
-        final String[] emojis={"😀","😂","🥰","😍","😎","😭","😡","👍","👎","👏","🙏","❤️","💔","🔥","🎉","🌹","😊","😉","🤔","😴","🤝","💯","✨","✅"};
-        // Use the IME's own view instead of an AlertDialog. Some Android/IME window
-        // configurations reject service-context dialogs, making the emoji key appear dead.
+        final String[] emojis={
+            // Faces and feelings (1-12)
+            "😀","😂","🥰","😍","😎","😭","😡","🤔","😴","😊","😉","🤗",
+            // People, hands and gestures (13-22)
+            "👍","👎","👏","🙏","🤝","👋","👌","✌️","💪","🫶",
+            // Hearts and celebration (23-30)
+            "❤️","🧡","💛","💚","💙","💜","💔","🎉",
+            // Animals and nature (31-38)
+            "🐱","🐶","🐼","🦁","🐸","🦋","🌹","🌻",
+            // Food and drink (39-44)
+            "🍎","🍕","🍔","🍟","🍰","☕",
+            // Travel and places (45-49)
+            "🚗","✈️","🚀","🏠","🌍",
+            // Activities and objects (50-55)
+            "⚽","🏀","🎮","🎵","📱","💡",
+            // Common signs and flags (56-60)
+            "🔥","✨","✅","❌","🏳️"
+        };
+        showCharacterPicker("انتخاب ایموجی (۶۰ مورد)", emojis, true);
+    }
+
+    void restoreKeyboardInPlace(LinearLayout displayRoot) {
+        // Replace the InputMethodService input view itself. Mutating the old root
+        // can leave the IME window displaying a stale/empty hierarchy on Android.
+        View keyboard = buildKeyboard();
+        setInputView(keyboard);
+    }
+
+    void showSymbolPicker(){
+        final String[] symbols={
+            // Punctuation and common keyboard symbols (1-20)
+            "!","?","؟","،","؛",".",",",":",";","…","'","\"","`","~","@","#","$","%","^","&",
+            // Operators and brackets (21-40)
+            "*","-","_","+","=","/","\\","|","<",">","(",")","[","]","{","}","٫","٬","×","÷",
+            // Currency and units (41-50)
+            "€","$","£","¥","₹","₽","₺","₩","¢","°",
+            // Legal, typographic and marks (51-60)
+            "©","®","™","§","¶","†","‡","•","※","‰",
+            // Arrows and status symbols (61-70)
+            "←","→","↑","↓","↔","↕","✓","✔","✗","★"
+        };
+        showCharacterPicker("انتخاب علامت (۷۰ مورد)", symbols, false);
+    }
+
+    // In-place, scrollable character panel: works within the active IME view and
+    // avoids a modal dialog stealing focus from the text editor.
+    void showCharacterPicker(String titleText, String[] characters, boolean emojiMode){
         final InputConnection openingConnection = getCurrentInputConnection();
+        if (root == null) {
+            Toast.makeText(this, "کیبورد آماده نیست؛ دوباره تلاش کنید.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(4), dp(4), dp(4), dp(4));
         panel.setBackgroundColor(bg);
 
         LinearLayout heading = row();
-        TextView title = button("انتخاب ایموجی", Color.rgb(250,249,242), null);
-        title.setTextSize(16 * keyboardScale());
+        TextView title = button(titleText, Color.rgb(250,249,242), null);
+        title.setTextSize(15 * keyboardScale());
         heading.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
         TextView close = button("✕ بازگشت", Color.rgb(250,220,225), () -> setInputView(buildKeyboard()));
         close.setTextSize(14 * keyboardScale());
         heading.addView(close, new LinearLayout.LayoutParams(dp(100), dp(40)));
         panel.addView(heading);
 
-        for (int i = 0; i < emojis.length; i += 6) {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        final int columns = emojiMode ? 6 : 7;
+        for (int i = 0; i < characters.length; i += columns) {
             LinearLayout line = row();
-            int limit = Math.min(i + 6, emojis.length);
+            int limit = Math.min(i + columns, characters.length);
             for (int j = i; j < limit; j++) {
-                final String emoji = emojis[j];
-                TextView key = button(emoji, Color.rgb(255,255,255), () -> {
+                final String character = characters[j];
+                TextView key = button(character, Color.rgb(255,255,255), () -> {
                     InputConnection target = getCurrentInputConnection();
                     if (target == null) target = openingConnection;
                     if (target != null) {
-                        target.commitText(emoji, 1);
-                        undoStack.push(emoji);
+                        target.commitText(character, 1);
+                        undoStack.push(character);
                         redoStack.clear();
                     } else {
-                        Toast.makeText(this,"ابتدا کادر نوشتن را انتخاب کنید.",Toast.LENGTH_LONG).show();
+                        Toast.makeText(this, "ابتدا کادر نوشتن را انتخاب کنید.", Toast.LENGTH_LONG).show();
                     }
                     setInputView(buildKeyboard());
                 });
-                key.setTextSize(27 * keyboardScale());
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(48), 1);
+                key.setTextSize((emojiMode ? 25 : 21) * keyboardScale());
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), 1);
                 lp.setMargins(dp(2), dp(2), dp(2), dp(2));
                 line.addView(key, lp);
             }
-            for (int j = limit - i; j < 6; j++) {
+            for (int j = limit - i; j < columns; j++) {
                 View spacer = new View(this);
-                line.addView(spacer, new LinearLayout.LayoutParams(0, dp(48), 1));
+                line.addView(spacer, new LinearLayout.LayoutParams(0, dp(46), 1));
             }
-            panel.addView(line);
+            list.addView(line);
         }
+        scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
+        panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        // Install the picker as the actual IME input view. This avoids relying on
+        // stale root references and makes the Symbols button use the same reliable
+        // path as Emoji, including the return-to-keyboard action.
         setInputView(panel);
     }
-    void showSymbolPicker(){
-        String[] symbols={"!","@","#","$","%","^","&","*","(",")","_","-","+","=","/","\\","|","~","`","<",">","[","]","{","}","€","¥","£","✓","©","®","™","°","…","؟","،","؛","«","»"};
-        new AlertDialog.Builder(this).setTitle("انتخاب علامت").setItems(symbols,(d,w)->type(symbols[w])).setNegativeButton("بستن",null).show();
-    }
+
     View numberKey(String label, float weight, int color){
         String[] parts=label.split(" ",2); String symbol=parts.length>1?parts[0]:""; String digit=parts.length>1?parts[1]:label;
         // Companion symbol is shown small in the lower-left corner; number stays prominent.
@@ -376,7 +513,13 @@ public class FKKsMeInputMethodService extends InputMethodService {
         LinearLayout bottom=row();
         String[] b={"😀","علامت","اعراب","🌐 EN/فا","Space","،",".","؟","←","→","↑","↓","=","-","[","}"};
         float[] weights={0.7f,0.75f,0.7f,1.0f,2.0f,0.55f,0.55f,0.55f,0.9f,0.9f,0.5f,0.5f,0.45f,0.45f,0.4f,0.4f};
-        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{if(label.equals("Space"))type("Space");else if(label.equals("Enter"))type("Enter");else type(label);});t.setTextSize((label.length()>2?13:21)*keyboardScale());if(label.equals("[")||label.equals("}"))t.setOnLongClickListener(v->{showVariants(label);return true;});bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
+        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{
+            if(label.equals("Space")) type("Space");
+            else if(label.equals("Enter")) type("Enter");
+            else if(label.equals("علامت")) showSymbolPicker();
+            else if(label.equals("😀")) showEmojiPicker();
+            else type(label);
+        });t.setTextSize((label.length()>2?13:21)*keyboardScale());if(label.equals("[")||label.equals("}"))t.setOnLongClickListener(v->{showVariants(label);return true;});bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
         root.addView(bottom);
         return root;
     }
