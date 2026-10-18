@@ -6,6 +6,10 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ClipboardManager;
+import android.content.ClipData;
+import android.content.SharedPreferences;
 import android.view.Gravity;
 import android.view.View;
 import android.view.MotionEvent;
@@ -14,10 +18,84 @@ import android.os.Looper;
 import android.view.inputmethod.InputConnection;
 import android.widget.*;
 import java.util.*;
+import org.json.JSONArray;
+import org.json.JSONException;
 
 public class FKKsMeInputMethodService extends InputMethodService {
+    static FKKsMeInputMethodService activeService;
     LinearLayout root, keyArea;
-    ArrayList<String> history = new ArrayList<>();
+    ArrayList<String> clipboardHistory = new ArrayList<>();
+    ClipboardManager clipboardManager;
+    ClipboardManager.OnPrimaryClipChangedListener clipboardListener;
+    static final String CLIP_PREFS = "fkksme_clipboard_history";
+    static final String CLIP_KEY = "items";
+
+    @Override public void onCreate() {
+        super.onCreate();
+        activeService=this;
+        loadClipboardHistory();
+        clipboardManager = (ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+        clipboardListener = () -> captureClipboard();
+        if (clipboardManager != null) clipboardManager.addPrimaryClipChangedListener(clipboardListener);
+    }
+
+    @Override public void onDestroy() {
+        if (clipboardManager != null && clipboardListener != null) clipboardManager.removePrimaryClipChangedListener(clipboardListener);
+        if(activeService==this) activeService=null;
+        super.onDestroy();
+    }
+
+    void loadClipboardHistory() {
+        String stored = getSharedPreferences(CLIP_PREFS, MODE_PRIVATE).getString("ordered", "[]");
+        clipboardHistory.clear();
+        try {
+            JSONArray array = new JSONArray(stored);
+            for (int i = 0; i < array.length(); i++) clipboardHistory.add(array.getString(i));
+        } catch (JSONException ignored) { }
+    }
+
+    void persistClipboardHistory() {
+        JSONArray array = new JSONArray();
+        for (String item : clipboardHistory) array.put(item);
+        getSharedPreferences(CLIP_PREFS, MODE_PRIVATE).edit().putString("ordered", array.toString()).apply();
+    }
+
+    void captureClipboard() {
+        if (clipboardManager == null) return;
+        try {
+            ClipData clip = clipboardManager.getPrimaryClip();
+            if (clip == null || clip.getItemCount() == 0) return;
+            CharSequence text = clip.getItemAt(0).coerceToText(this);
+            if (text == null || text.length() == 0) return;
+            String value = text.toString().trim();
+            if (value.isEmpty()) return;
+            clipboardHistory.remove(value);
+            clipboardHistory.add(0, value);
+            while (clipboardHistory.size() > 30) clipboardHistory.remove(clipboardHistory.size()-1);
+            persistClipboardHistory();
+        } catch (Exception ignored) { }
+    }
+
+    void showClipboardHistory() {
+        captureClipboard();
+        loadClipboardHistory();
+        if (clipboardHistory.isEmpty()) {
+            Toast.makeText(this, "تاریخچهٔ کلیپ‌بورد خالی است؛ ابتدا متنی را کپی کنید.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] items = clipboardHistory.toArray(new String[0]);
+        new AlertDialog.Builder(this).setTitle("تاریخچهٔ کلیپ‌بورد")
+            .setItems(items, (dialog, which) -> {
+                InputConnection ic = getCurrentInputConnection();
+                if (ic != null) ic.commitText(items[which], 1);
+            }).setNeutralButton("پاک‌کردن تاریخچه", (dialog, which) -> {
+                clipboardHistory.clear();
+                getSharedPreferences(CLIP_PREFS, MODE_PRIVATE).edit().remove("ordered").apply();
+                Toast.makeText(this, "تاریخچه پاک شد", Toast.LENGTH_SHORT).show();
+            }).setNegativeButton("بستن", null).show();
+    }
+    final ArrayDeque<String> undoStack = new ArrayDeque<>();
+    final ArrayDeque<String> redoStack = new ArrayDeque<>();
     boolean caps=false;
     boolean english=false;
     // Resize cycle: normal -> 75% -> 50% -> normal.
@@ -73,8 +151,11 @@ public class FKKsMeInputMethodService extends InputMethodService {
             case "Paste": ic.performContextMenuAction(android.R.id.paste); return;
             case "Copy": ic.performContextMenuAction(android.R.id.copy); return;
             case "Select": ic.performContextMenuAction(android.R.id.selectAll); return;
-            case "Undo": ic.performContextMenuAction(0x01020000); return;
-            case "Redo": ic.performContextMenuAction(0x01020001); return;
+            case "Undo": undoLast(); return;
+            case "Redo": redoLast(); return;
+            case "Emoji": showEmojiPicker(); return;
+            case "Symbols": showSymbolPicker(); return;
+            case "Diacritics": showDiacritics(); return;
             case "←": sendDpad(android.view.KeyEvent.KEYCODE_DPAD_LEFT); return;
             case "→": sendDpad(android.view.KeyEvent.KEYCODE_DPAD_RIGHT); return;
             case "↑": sendDpad(android.view.KeyEvent.KEYCODE_DPAD_UP); return;
@@ -84,11 +165,30 @@ public class FKKsMeInputMethodService extends InputMethodService {
             case "Tool": showCalculator(); return;
             case "Muse": showMuse(); return;
             case "Resize": resizeLevel=(resizeLevel+1)%3; setInputView(buildKeyboard()); Toast.makeText(this, resizeLevel==1?"اندازهٔ کیبورد: ۷۵٪":resizeLevel==2?"اندازهٔ کیبورد: ۵۰٪":"اندازهٔ عادی",Toast.LENGTH_SHORT).show(); return;
-            case "History": new AlertDialog.Builder(this).setTitle("تاریخچه").setItems(history.toArray(new String[0]),(d,w)->{InputConnection c=getCurrentInputConnection();if(c!=null)c.commitText(history.get(w),1);}).setPositiveButton("بستن",null).show(); return;
+            case "History": showClipboardHistory(); return;
             case "Copy Screen": Toast.makeText(this,"برای کپی، متن انتخاب‌شده را کپی کنید",Toast.LENGTH_SHORT).show(); return;
         }
-        ic.commitText(s,1); history.add(s); if(history.size()>50)history.remove(0);
+        ic.commitText(s,1);
+        undoStack.push(s); redoStack.clear();
     }
+
+    void undoLast(){
+        InputConnection ic=getCurrentInputConnection();
+        if(ic==null)return;
+        if(undoStack.isEmpty()){Toast.makeText(this,"چیزی برای واگردانی ثبت نشده است",Toast.LENGTH_SHORT).show();return;}
+        String value=undoStack.pop();
+        ic.deleteSurroundingText(value.length(),0);
+        redoStack.push(value);
+    }
+    void redoLast(){
+        InputConnection ic=getCurrentInputConnection();
+        if(ic==null)return;
+        if(redoStack.isEmpty()){Toast.makeText(this,"چیزی برای انجام دوباره ثبت نشده است",Toast.LENGTH_SHORT).show();return;}
+        String value=redoStack.pop();
+        ic.commitText(value,1);
+        undoStack.push(value);
+    }
+
     void sendDpad(int keyCode) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
@@ -132,22 +232,29 @@ public class FKKsMeInputMethodService extends InputMethodService {
         new AlertDialog.Builder(this).setTitle("ماشین حساب").setView(box).setPositiveButton("درج نتیجه", (d,w)->{if(getCurrentInputConnection()!=null)getCurrentInputConnection().commitText(result.getText(),1);}).setNegativeButton("بستن",null).show();
     }
     void runWebsiteControl(boolean upload){
-        if(!SiteButtonAccessibilityService.isEnabled()){
-            new AlertDialog.Builder(this).setTitle(upload?"File — بارگذاری فایل":"Send — ارسال پیام")
-                .setMessage("برای اجرای دکمهٔ واقعی سایت، سرویس دسترس‌پذیری FKKsMe را فعال کنید. پس از فعال‌سازی، این دکمه روی کنترل بارگذاری/پیوست یا ارسالِ قابل‌شناسایی در صفحه می‌زند.")
-                .setPositiveButton("تنظیمات دسترس‌پذیری",(d,w)->{try{startActivity(new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Exception e){Toast.makeText(this,"تنظیمات را دستی باز کنید",Toast.LENGTH_LONG).show();}})
-                .setNegativeButton("لغو",null).show();
+        if(upload){
+            try {
+                Intent picker = new Intent(this, FilePickerActivity.class);
+                picker.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(picker);
+            } catch(Exception e) {
+                Toast.makeText(this,"انتخاب‌گر فایل دستگاه باز نشد",Toast.LENGTH_LONG).show();
+            }
             return;
         }
-        boolean clicked=SiteButtonAccessibilityService.clickWebsiteControl(upload);
-        if(clicked) Toast.makeText(this,upload?"دکمهٔ پیوست/بارگذاری سایت فعال شد":"دکمهٔ ارسال سایت فعال شد",Toast.LENGTH_SHORT).show();
-        else if(!upload){
-            InputConnection ic=getCurrentInputConnection();
-            android.view.inputmethod.EditorInfo info=getCurrentInputEditorInfo();
-            int action=info==null?0:(info.imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION);
-            if(ic!=null && action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED && ic.performEditorAction(action)) return;
-            Toast.makeText(this,"دکمهٔ ارسال در صفحه پیدا نشد؛ ممکن است سایت از این روش پشتیبانی نکند.",Toast.LENGTH_LONG).show();
-        } else Toast.makeText(this,"دکمهٔ پیوست/بارگذاری پیدا نشد. صفحهٔ سایت را بررسی کنید.",Toast.LENGTH_LONG).show();
+        InputConnection ic=getCurrentInputConnection();
+        android.view.inputmethod.EditorInfo info=getCurrentInputEditorInfo();
+        if(ic==null){ Toast.makeText(this,"کادر ورودی فعالی پیدا نشد",Toast.LENGTH_SHORT).show(); return; }
+        int action=info==null?0:(info.imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION);
+        boolean done=false;
+        if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED){
+            done=ic.performEditorAction(action);
+        }
+        if(!done){
+            long now=android.os.SystemClock.uptimeMillis();
+            ic.sendKeyEvent(new android.view.KeyEvent(now,now,android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_ENTER,0));
+            ic.sendKeyEvent(new android.view.KeyEvent(now,android.os.SystemClock.uptimeMillis(),android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_ENTER,0));
+        }
     }
     void showMuse(){
         LinearLayout panel=new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setBackgroundColor(Color.rgb(245,246,250));
@@ -207,13 +314,13 @@ public class FKKsMeInputMethodService extends InputMethodService {
         for(int i=0;i<5;i++){TextView blank=button("",bg,null);nav.addView(blank,new LinearLayout.LayoutParams(0,dp(34),1));}
         TextView up=button("↑",bg,()->type("↑")); TextView down=button("↓",bg,()->type("↓")); nav.addView(up,new LinearLayout.LayoutParams(0,dp(34),0.5f));nav.addView(down,new LinearLayout.LayoutParams(0,dp(34),0.5f));
         TextView file=button("File",Color.rgb(219,238,255),()->type("File"));nav.addView(file,new LinearLayout.LayoutParams(0,dp(34),1));TextView send=button("Send",Color.rgb(207,242,215),()->type("Send"));nav.addView(send,new LinearLayout.LayoutParams(0,dp(34),1));root.addView(nav);
-        LinearLayout nums=row(); String[] ns={"! ۱","@ ۲","# ۳","$ ۴","% ۵","^ ۶","& ۷","* ۸","( ۹",") ۰"}; for(String n:ns){ View nk=numberKey(n,0.95f,bg); LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(0,dp(48),0.95f); nlp.setMargins(dp(1),dp(1),dp(1),dp(1)); nums.addView(nk,nlp); } addKey(nums,"⌫",1.55f,Color.rgb(250,220,225));root.addView(nums);
+        LinearLayout nums=row(); String[] ns={"! 1","@ 2","# 3","$ 4","% 5","^ 6","& 7","* 8","( 9",") 0"}; for(String n:ns){ View nk=numberKey(n,0.95f,bg); LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(0,dp(48),0.95f); nlp.setMargins(dp(1),dp(1),dp(1),dp(1)); nums.addView(nk,nlp); } addKey(nums,"⌫",1.55f,Color.rgb(250,220,225));root.addView(nums);
         String[][] rows= english ? new String[][]{{caps?"Q":"q",caps?"W":"w",caps?"E":"e",caps?"R":"r",caps?"T":"t",caps?"Y":"y",caps?"U":"u",caps?"I":"i",caps?"O":"o",caps?"P":"p"},{caps?"A":"a",caps?"S":"s",caps?"D":"d",caps?"F":"f",caps?"G":"g",caps?"H":"h",caps?"J":"j",caps?"K":"k",caps?"L":"l"},{"Caps",caps?"Z":"z",caps?"X":"x",caps?"C":"c",caps?"V":"v",caps?"B":"b",caps?"N":"n",caps?"M":"m",",",".","Enter"}} : new String[][]{{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","Enter"}};
         for(int ri=0;ri<rows.length;ri++){LinearLayout r=row();for(String k:rows[ri]){ if(k.equals("Caps")){ addKey(r,k,1.15f,bg); } else if(k.equals("Enter")){ addKey(r,k,2.15f,Color.rgb(210,229,250)); } else addKey(r,k,1,bg); }root.addView(r);}
         LinearLayout bottom=row();
-        String[] b={"😀","&@#\n*¥✓","اعراب","🌐 EN/فا","Space","،",".","؟","←","→","↑","↓","=","-","[","}"};
+        String[] b={"😀","علامت","اعراب","🌐 EN/فا","Space","،",".","؟","←","→","↑","↓","=","-","[","}"};
         float[] weights={0.7f,0.75f,0.7f,1.0f,2.0f,0.55f,0.55f,0.55f,0.9f,0.9f,0.5f,0.5f,0.45f,0.45f,0.4f,0.4f};
-        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{if(label.equals("😀"))showEmojiPicker();else if(label.equals("&@#\n*¥✓"))showSymbolPicker();else if(label.equals("Space"))type("Space");else if(label.equals("🌐 EN/فا")){english=!english; View v=buildKeyboard(); setInputView(v);}else if(label.equals("Enter"))type("Enter");else type(label);});t.setTextSize((label.length()>2?13:21)*keyboardScale());if(label.equals("[")||label.equals("}"))t.setOnLongClickListener(v->{showVariants(label);return true;});bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
+        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{if(label.equals("😀"))showEmojiPicker();else if(label.equals("علامت"))showSymbolPicker();else if(label.equals("اعراب"))showDiacritics();else if(label.equals("Space"))type("Space");else if(label.equals("🌐 EN/فا")){english=!english; View v=buildKeyboard(); setInputView(v);}else if(label.equals("Enter"))type("Enter");else type(label);});t.setTextSize((label.length()>2?13:21)*keyboardScale());if(label.equals("[")||label.equals("}"))t.setOnLongClickListener(v->{showVariants(label);return true;});bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
         root.addView(bottom);
         return root;
     }

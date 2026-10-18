@@ -26,3 +26,9 @@ Install the built APK, then open Android Settings → System/General management 
 
 
 Note: the keyboard itself has no suggestion/correction strip. Android spell-check behavior inside a target app can still be controlled by that app or the system keyboard settings.
+
+
+### File / Send (بدون مجوز دسترس‌پذیری)
+- دکمه File از انتخاب‌گر استاندارد فایل اندروید استفاده می‌کند و برای درج محتوا تلاش می‌کند از `commitContent` بهره ببرد؛ این کار فقط در کادرهایی پشتیبانی می‌شود که درج محتوای فایل را قبول کنند. در بیشتر فرم‌های وب، باید دکمهٔ پیوست خود سایت را انتخاب کرد.
+- دکمه Send ابتدا فرمان ارسال استاندارد کادر را اجرا می‌کند و در صورت نیاز رویداد Enter را می‌فرستد.
+- هیچ سرویس دسترس‌پذیری یا مجوز جداگانه‌ای لازم نیست.
