@@ -145,7 +145,10 @@ public class FKKsMeInputMethodService extends InputMethodService {
         switch(s){
             case "⌫": ic.deleteSurroundingText(1,0); return;
             case "Caps": caps=!caps; setInputView(buildKeyboard()); return;
-            case "اعراب": showDiacritics(); return;
+            case "اعراب": case "Diacritics": showDiacritics(); return;
+            case "😀": case "Emoji": showEmojiPicker(); return;
+            case "علامت": case "علامتها": case "Symbols": showSymbolPicker(); return;
+            case "🌐 EN/فا": english=!english; setInputView(buildKeyboard()); return;
             case "Enter": { int action=getCurrentInputEditorInfo()!=null ? (getCurrentInputEditorInfo().imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION) : 0; if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED) ic.performEditorAction(action); else ic.commitText("\n",1); return; }
             case "Space": ic.commitText(" ",1); return;
             case "Paste": ic.performContextMenuAction(android.R.id.paste); return;
@@ -153,9 +156,6 @@ public class FKKsMeInputMethodService extends InputMethodService {
             case "Select": ic.performContextMenuAction(android.R.id.selectAll); return;
             case "Undo": undoLast(); return;
             case "Redo": redoLast(); return;
-            case "Emoji": showEmojiPicker(); return;
-            case "Symbols": showSymbolPicker(); return;
-            case "Diacritics": showDiacritics(); return;
             case "←": sendDpad(android.view.KeyEvent.KEYCODE_DPAD_LEFT); return;
             case "→": sendDpad(android.view.KeyEvent.KEYCODE_DPAD_RIGHT); return;
             case "↑": sendDpad(android.view.KeyEvent.KEYCODE_DPAD_UP); return;
@@ -246,14 +246,17 @@ public class FKKsMeInputMethodService extends InputMethodService {
         android.view.inputmethod.EditorInfo info=getCurrentInputEditorInfo();
         if(ic==null){ Toast.makeText(this,"کادر ورودی فعالی پیدا نشد",Toast.LENGTH_SHORT).show(); return; }
         int action=info==null?0:(info.imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION);
-        boolean done=false;
-        if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED){
-            done=ic.performEditorAction(action);
-        }
-        if(!done){
-            long now=android.os.SystemClock.uptimeMillis();
-            ic.sendKeyEvent(new android.view.KeyEvent(now,now,android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_ENTER,0));
-            ic.sendKeyEvent(new android.view.KeyEvent(now,android.os.SystemClock.uptimeMillis(),android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_ENTER,0));
+        // Prefer the editor's declared submit action. Do not fall back to Enter,
+        // because in chat sites Enter may insert a newline rather than send.
+        if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEND ||
+            action == android.view.inputmethod.EditorInfo.IME_ACTION_GO ||
+            action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+            action == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+            boolean done = ic.performEditorAction(action);
+            if (!done) Toast.makeText(this,"ویرایشگر سایت فرمان ارسال را نپذیرفت؛ دکمهٔ ارسال خود سایت را لمس کنید.",Toast.LENGTH_LONG).show();
+        } else {
+            boolean done = ic.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEND);
+            if (!done) Toast.makeText(this,"این سایت فرمان ارسال را از کیبورد نمی‌پذیرد؛ برای ارسال، دکمهٔ خود سایت لازم است.",Toast.LENGTH_LONG).show();
         }
     }
     void showMuse(){
@@ -314,13 +317,18 @@ public class FKKsMeInputMethodService extends InputMethodService {
         for(int i=0;i<5;i++){TextView blank=button("",bg,null);nav.addView(blank,new LinearLayout.LayoutParams(0,dp(34),1));}
         TextView up=button("↑",bg,()->type("↑")); TextView down=button("↓",bg,()->type("↓")); nav.addView(up,new LinearLayout.LayoutParams(0,dp(34),0.5f));nav.addView(down,new LinearLayout.LayoutParams(0,dp(34),0.5f));
         TextView file=button("File",Color.rgb(219,238,255),()->type("File"));nav.addView(file,new LinearLayout.LayoutParams(0,dp(34),1));TextView send=button("Send",Color.rgb(207,242,215),()->type("Send"));nav.addView(send,new LinearLayout.LayoutParams(0,dp(34),1));root.addView(nav);
-        LinearLayout nums=row(); String[] ns={"! 1","@ 2","# 3","$ 4","% 5","^ 6","& 7","* 8","( 9",") 0"}; for(String n:ns){ View nk=numberKey(n,0.95f,bg); LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(0,dp(48),0.95f); nlp.setMargins(dp(1),dp(1),dp(1),dp(1)); nums.addView(nk,nlp); } addKey(nums,"⌫",1.55f,Color.rgb(250,220,225));root.addView(nums);
+        LinearLayout nums=row();
+        String[] ns = english
+            ? new String[]{"! 1","@ 2","# 3","$ 4","% 5","^ 6","& 7","* 8","( 9",") 0"}
+            : new String[]{"! ۱","@ ۲","# ۳","$ ۴","% ۵","^ ۶","& ۷","* ۸","( ۹",") ۰"};
+        for(String n:ns){ View nk=numberKey(n,0.95f,bg); LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(0,dp(48),0.95f); nlp.setMargins(dp(1),dp(1),dp(1),dp(1)); nums.addView(nk,nlp); }
+        addKey(nums,"⌫",1.55f,Color.rgb(250,220,225));root.addView(nums);
         String[][] rows= english ? new String[][]{{caps?"Q":"q",caps?"W":"w",caps?"E":"e",caps?"R":"r",caps?"T":"t",caps?"Y":"y",caps?"U":"u",caps?"I":"i",caps?"O":"o",caps?"P":"p"},{caps?"A":"a",caps?"S":"s",caps?"D":"d",caps?"F":"f",caps?"G":"g",caps?"H":"h",caps?"J":"j",caps?"K":"k",caps?"L":"l"},{"Caps",caps?"Z":"z",caps?"X":"x",caps?"C":"c",caps?"V":"v",caps?"B":"b",caps?"N":"n",caps?"M":"m",",",".","Enter"}} : new String[][]{{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","Enter"}};
         for(int ri=0;ri<rows.length;ri++){LinearLayout r=row();for(String k:rows[ri]){ if(k.equals("Caps")){ addKey(r,k,1.15f,bg); } else if(k.equals("Enter")){ addKey(r,k,2.15f,Color.rgb(210,229,250)); } else addKey(r,k,1,bg); }root.addView(r);}
         LinearLayout bottom=row();
         String[] b={"😀","علامت","اعراب","🌐 EN/فا","Space","،",".","؟","←","→","↑","↓","=","-","[","}"};
         float[] weights={0.7f,0.75f,0.7f,1.0f,2.0f,0.55f,0.55f,0.55f,0.9f,0.9f,0.5f,0.5f,0.45f,0.45f,0.4f,0.4f};
-        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{if(label.equals("😀"))showEmojiPicker();else if(label.equals("علامت"))showSymbolPicker();else if(label.equals("اعراب"))showDiacritics();else if(label.equals("Space"))type("Space");else if(label.equals("🌐 EN/فا")){english=!english; View v=buildKeyboard(); setInputView(v);}else if(label.equals("Enter"))type("Enter");else type(label);});t.setTextSize((label.length()>2?13:21)*keyboardScale());if(label.equals("[")||label.equals("}"))t.setOnLongClickListener(v->{showVariants(label);return true;});bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
+        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{if(label.equals("Space"))type("Space");else if(label.equals("Enter"))type("Enter");else type(label);});t.setTextSize((label.length()>2?13:21)*keyboardScale());if(label.equals("[")||label.equals("}"))t.setOnLongClickListener(v->{showVariants(label);return true;});bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
         root.addView(bottom);
         return root;
     }
