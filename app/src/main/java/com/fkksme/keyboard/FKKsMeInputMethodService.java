@@ -141,13 +141,16 @@ public class FKKsMeInputMethodService extends InputMethodService {
         new AlertDialog.Builder(this).setTitle("حرکات کوتاه عربی").setItems(names,(d,w)->{InputConnection ic=getCurrentInputConnection();if(ic!=null)ic.commitText(marks[w],1);}).setNegativeButton("بستن",null).show();
     }
     void type(String s) {
+        // UI-only pickers must open even if the current editor temporarily has no InputConnection.
+        switch(s){
+            case "😀": case "Emoji": showEmojiPicker(); return;
+            case "اعراب": case "Diacritics": showDiacritics(); return;
+            case "علامت": case "علامتها": case "Symbols": showSymbolPicker(); return;
+        }
         InputConnection ic=getCurrentInputConnection(); if(ic==null)return;
         switch(s){
             case "⌫": ic.deleteSurroundingText(1,0); return;
             case "Caps": caps=!caps; setInputView(buildKeyboard()); return;
-            case "اعراب": case "Diacritics": showDiacritics(); return;
-            case "😀": case "Emoji": showEmojiPicker(); return;
-            case "علامت": case "علامتها": case "Symbols": showSymbolPicker(); return;
             case "🌐 EN/فا": english=!english; setInputView(buildKeyboard()); return;
             case "Enter": { int action=getCurrentInputEditorInfo()!=null ? (getCurrentInputEditorInfo().imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION) : 0; if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED) ic.performEditorAction(action); else ic.commitText("\n",1); return; }
             case "Space": ic.commitText(" ",1); return;
@@ -285,8 +288,53 @@ public class FKKsMeInputMethodService extends InputMethodService {
         double factor(){if(p<s.length()&&(s.charAt(p)=='+'||s.charAt(p)=='-')){char c=s.charAt(p++);double v=factor();return c=='-'?-v:v;} if(p<s.length()&&s.charAt(p)=='('){p++;double v=expr();if(p>=s.length()||s.charAt(p++)!=')')throw new IllegalArgumentException();return v;}int start=p;while(p<s.length()&&(Character.isDigit(s.charAt(p))||s.charAt(p)=='.'))p++;if(start==p)throw new IllegalArgumentException();return Double.parseDouble(s.substring(start,p));}
     }
     void showEmojiPicker(){
-        String[] emojis={"😀","😂","🥰","😍","😎","😭","😡","👍","👎","👏","🙏","❤️","💔","🔥","🎉","🌹","😊","😉","🤔","😴","🤝","💯","✨","✅"};
-        new AlertDialog.Builder(this).setTitle("انتخاب ایموجی").setItems(emojis,(d,w)->type(emojis[w])).setNegativeButton("بستن",null).show();
+        final String[] emojis={"😀","😂","🥰","😍","😎","😭","😡","👍","👎","👏","🙏","❤️","💔","🔥","🎉","🌹","😊","😉","🤔","😴","🤝","💯","✨","✅"};
+        // Use the IME's own view instead of an AlertDialog. Some Android/IME window
+        // configurations reject service-context dialogs, making the emoji key appear dead.
+        final InputConnection openingConnection = getCurrentInputConnection();
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(4), dp(4), dp(4), dp(4));
+        panel.setBackgroundColor(bg);
+
+        LinearLayout heading = row();
+        TextView title = button("انتخاب ایموجی", Color.rgb(250,249,242), null);
+        title.setTextSize(16 * keyboardScale());
+        heading.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
+        TextView close = button("✕ بازگشت", Color.rgb(250,220,225), () -> setInputView(buildKeyboard()));
+        close.setTextSize(14 * keyboardScale());
+        heading.addView(close, new LinearLayout.LayoutParams(dp(100), dp(40)));
+        panel.addView(heading);
+
+        for (int i = 0; i < emojis.length; i += 6) {
+            LinearLayout line = row();
+            int limit = Math.min(i + 6, emojis.length);
+            for (int j = i; j < limit; j++) {
+                final String emoji = emojis[j];
+                TextView key = button(emoji, Color.rgb(255,255,255), () -> {
+                    InputConnection target = getCurrentInputConnection();
+                    if (target == null) target = openingConnection;
+                    if (target != null) {
+                        target.commitText(emoji, 1);
+                        undoStack.push(emoji);
+                        redoStack.clear();
+                    } else {
+                        Toast.makeText(this,"ابتدا کادر نوشتن را انتخاب کنید.",Toast.LENGTH_LONG).show();
+                    }
+                    setInputView(buildKeyboard());
+                });
+                key.setTextSize(27 * keyboardScale());
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(48), 1);
+                lp.setMargins(dp(2), dp(2), dp(2), dp(2));
+                line.addView(key, lp);
+            }
+            for (int j = limit - i; j < 6; j++) {
+                View spacer = new View(this);
+                line.addView(spacer, new LinearLayout.LayoutParams(0, dp(48), 1));
+            }
+            panel.addView(line);
+        }
+        setInputView(panel);
     }
     void showSymbolPicker(){
         String[] symbols={"!","@","#","$","%","^","&","*","(",")","_","-","+","=","/","\\","|","~","`","<",">","[","]","{","}","€","¥","£","✓","©","®","™","°","…","؟","،","؛","«","»"};
