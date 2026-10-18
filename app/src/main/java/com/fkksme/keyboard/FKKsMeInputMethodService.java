@@ -17,6 +17,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
     LinearLayout root, keyArea;
     ArrayList<String> history = new ArrayList<>();
     boolean caps=false;
+    boolean english=false;
     int bg=Color.rgb(250,249,242), ink=Color.rgb(42,65,76);
     @Override public View onCreateInputView() { return buildKeyboard(); }
 
@@ -41,7 +42,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
         InputConnection ic=getCurrentInputConnection(); if(ic==null)return;
         switch(s){
             case "⌫": ic.deleteSurroundingText(1,0); return;
-            case "Enter": ic.commitText("\n",1); return;
+            case "Enter": { int action=getCurrentInputEditorInfo()!=null ? (getCurrentInputEditorInfo().imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION) : 0; if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED) ic.performEditorAction(action); else ic.commitText("\n",1); return; }
             case "Space": ic.commitText(" ",1); return;
             case "Paste": ic.performContextMenuAction(android.R.id.paste); return;
             case "Copy": ic.performContextMenuAction(android.R.id.copy); return;
@@ -68,7 +69,10 @@ public class FKKsMeInputMethodService extends InputMethodService {
         case "ی": variants=new String[]{"ی","ي","ى","ئ","ې","ے"};break;
         case "ک": variants=new String[]{"ک","ك","ګ","گ"};break;
         default: variants=new String[]{key};}
-        new AlertDialog.Builder(this).setTitle("زیرگونه‌های «"+key+"»").setItems(variants,(d,w)->type(variants[w])).show();
+        LinearLayout choices=new LinearLayout(this); choices.setOrientation(LinearLayout.VERTICAL);
+        for(String v:variants){ TextView choice=button(v,Color.rgb(250,249,242),()->{}); choice.setTextSize(25); choices.addView(choice,new LinearLayout.LayoutParams(-1,dp(44))); choice.setOnClickListener(view->{ type(v); if(choices.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup)choices.getParent()).removeView(choices); }); }
+        ScrollView scroll=new ScrollView(this); scroll.addView(choices);
+        new AlertDialog.Builder(this).setTitle("زیرگونه‌های «"+key+"» — یکی را انتخاب کنید").setView(scroll).setNegativeButton("بستن",null).show();
     }
     void showCalculator(){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); EditText expr=new EditText(this); expr.setSingleLine(true); expr.setHint("مثلاً 12+3*4"); box.addView(expr);
@@ -111,13 +115,13 @@ public class FKKsMeInputMethodService extends InputMethodService {
         for(int i=0;i<5;i++){TextView blank=button("",bg,null);nav.addView(blank,new LinearLayout.LayoutParams(0,dp(34),1));}
         TextView up=button("↑",bg,()->type("↑")); TextView down=button("↓",bg,()->type("↓")); nav.addView(up,new LinearLayout.LayoutParams(0,dp(34),0.5f));nav.addView(down,new LinearLayout.LayoutParams(0,dp(34),0.5f));
         TextView file=button("File",bg,()->type("File"));nav.addView(file,new LinearLayout.LayoutParams(0,dp(34),1));TextView send=button("Send",bg,()->{InputConnection ic=getCurrentInputConnection();if(ic!=null)ic.performEditorAction(getCurrentInputEditorInfo().imeOptions & (android.view.inputmethod.EditorInfo.IME_MASK_ACTION));});nav.addView(send,new LinearLayout.LayoutParams(0,dp(34),1));root.addView(nav);
-        LinearLayout nums=row(); String[] ns={"! ۱","@ ۲","# ۳","$ ۴","% ۵","^ ۶","& ۷","* ۸","( ۹",") ۰","⌫"}; for(String n:ns)addKey(nums,n,1,n.equals("⌫")?Color.rgb(250,220,225):bg);root.addView(nums);
-        String[][] rows={{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","=","-"}};
-        for(int ri=0;ri<rows.length;ri++){LinearLayout r=row();for(String k:rows[ri])addKey(r,k,1,bg);root.addView(r);}
+        LinearLayout nums=row(); String[] ns={"! ۱","@ ۲","# ۳","$ ۴","% ۵","^ ۶","& ۷","* ۸","( ۹",") ۰","⌫"}; for(String n:ns)addKey(nums,n,n.equals("⌫")?1.55f:0.95f,n.equals("⌫")?Color.rgb(250,220,225):bg);root.addView(nums);
+        String[][] rows= english ? new String[][]{{"q","w","e","r","t","y","u","i","o","p"},{"a","s","d","f","g","h","j","k","l"},{"Caps","z","x","c","v","b","n","m",",","."}} : new String[][]{{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","=","-"}};
+        for(int ri=0;ri<rows.length;ri++){LinearLayout r=row();for(String k:rows[ri]){ if(k.equals("Caps")){ addKey(r,k,1.15f,bg); } else addKey(r,k,1,bg); }root.addView(r);}
         LinearLayout bottom=row();
-        String[] b={"😀","&@#\n*¥✓","اعراب","🌐 FA","Space","،",".","؟","←","→","↑","↓","[","]"};
-        float[] weights={0.8f,0.8f,0.8f,1,2.2f,0.7f,0.7f,0.7f,1.1f,1.1f,0.55f,0.55f,0.5f,0.5f};
-        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{if(label.equals("😀"))type("😀");else if(label.equals("Space"))type("Space");else if(label.equals("🌐 FA"))((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker();else type(label);});t.setTextSize(label.length()>2?13:21);bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
+        String[] b={"😀","&@#\n*¥✓","اعراب","🌐 EN/فا","Space","،",".","؟","←","→","↑","↓","Enter","[","]"};
+        float[] weights={0.7f,0.75f,0.7f,1.0f,2.0f,0.55f,0.55f,0.55f,0.9f,0.9f,0.5f,0.5f,1.0f,0.4f,0.4f};
+        for(int i=0;i<b.length;i++){final String label=b[i];TextView t=button(label,bg,()->{if(label.equals("😀"))type("😀");else if(label.equals("Space"))type("Space");else if(label.equals("🌐 EN/فا")){english=!english; View v=buildKeyboard(); setInputView(v);}else if(label.equals("Enter"))type("Enter");else type(label);});t.setTextSize(label.length()>2?13:21);bottom.addView(t,new LinearLayout.LayoutParams(0,dp(44),weights[i]));}
         root.addView(bottom);
         return root;
     }

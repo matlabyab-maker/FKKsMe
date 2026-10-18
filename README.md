@@ -5,6 +5,8 @@ Android Studio / GitHub Actions project for the FKKsMe Persian keyboard.
 ## Features
 - Persian key layout inspired by the supplied reference image.
 - Long-press variants for ا، ی، ک، و (including common و forms).
+- Built-in Persian/English layout toggle using the 🌐 EN/فا key.
+- Visible Enter key; backspace key is wider.
 - Paste, Copy, Copy Screen, Select, Undo, Redo, History, Tool, Muse, Resize controls.
 - Tool opens a simple working calculator.
 - Muse opens an interactive touchpad with pointer movement, click, zoom, and close controls.
@@ -21,3 +23,6 @@ The workflow uses the Gradle setup action and does not depend on a missing `grad
 
 ## Install / enable keyboard
 Install the built APK, then open Android Settings → System/General management → Languages & input → On-screen keyboard → Manage keyboards, enable **FKKsMe**, and select it as the current keyboard.
+
+
+Note: the keyboard itself has no suggestion/correction strip. Android spell-check behavior inside a target app can still be controlled by that app or the system keyboard settings.
