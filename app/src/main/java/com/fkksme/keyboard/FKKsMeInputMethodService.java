@@ -23,7 +23,8 @@ import org.json.JSONException;
 
 public class FKKsMeInputMethodService extends InputMethodService {
     static FKKsMeInputMethodService activeService;
-    LinearLayout root, keyArea;
+    LinearLayout root, keyArea, suggestionRow;
+    String[] suggestionDictionary = new String[0];
     ArrayList<String> clipboardHistory = new ArrayList<>();
     ClipboardManager clipboardManager;
     ClipboardManager.OnPrimaryClipChangedListener clipboardListener;
@@ -34,6 +35,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
         super.onCreate();
         activeService=this;
         loadClipboardHistory();
+        try { suggestionDictionary = getResources().getStringArray(R.array.suggested_words_fa); } catch (Exception ignored) { suggestionDictionary = new String[0]; }
         clipboardManager = (ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
         clipboardListener = () -> captureClipboard();
         if (clipboardManager != null) clipboardManager.addPrimaryClipChangedListener(clipboardListener);
@@ -136,9 +138,41 @@ public class FKKsMeInputMethodService extends InputMethodService {
         }
     }
     void showDiacritics(){
-        String[] names={"َ  ـَ  فتحه","ِ  ـِ  کسره","ُ  ـُ  ضمه","ْ  ـْ  سکون","ّ  ـّ  تشدید","ً  ـً  تنوین فتح","ٍ  ـٍ  تنوین کسر","ٌ  ـٌ  تنوین ضم","ٰ  الف خنجری","ٓ  مدّ","ٔ  همزه بالا","ٕ  همزه پایین"};
-        String[] marks={"\u064e","\u0650","\u064f","\u0652","\u0651","\u064b","\u064d","\u064c","\u0670","\u0653","\u0654","\u0655"};
-        new AlertDialog.Builder(this).setTitle("حرکات کوتاه عربی").setItems(names,(d,w)->{InputConnection ic=getCurrentInputConnection();if(ic!=null)ic.commitText(marks[w],1);}).setNegativeButton("بستن",null).show();
+        final String[] names={"فتحه َ","کسره ِ","ضمه ُ","سکون ْ","تشدید ّ","تنوین فتح ً","تنوین کسر ٍ","تنوین ضم ٌ","الف خنجری ٰ","مدّ ٓ","همزه بالا ٔ","همزه پایین ٕ"};
+        final String[] marks={"\u064e","\u0650","\u064f","\u0652","\u0651","\u064b","\u064d","\u064c","\u0670","\u0653","\u0654","\u0655"};
+        final InputConnection openingConnection=getCurrentInputConnection();
+        LinearLayout panel=new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(4),dp(4),dp(4),dp(4));
+        panel.setBackgroundColor(bg);
+        LinearLayout heading=row();
+        TextView title=button("اعراب و حرکات",Color.rgb(250,249,242),null);
+        heading.addView(title,new LinearLayout.LayoutParams(0,dp(40),1));
+        TextView close=button("✕ بازگشت",Color.rgb(250,220,225),()->setInputView(buildKeyboard()));
+        heading.addView(close,new LinearLayout.LayoutParams(dp(100),dp(40)));
+        panel.addView(heading);
+        ScrollView scroll=new ScrollView(this);
+        LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        for(int i=0;i<names.length;i+=3){
+            LinearLayout line=row();
+            for(int j=i;j<Math.min(i+3,names.length);j++){
+                final int index=j;
+                TextView key=button(names[j],Color.rgb(255,255,255),()->{
+                    InputConnection target=getCurrentInputConnection();
+                    if(target==null) target=openingConnection;
+                    if(target!=null){target.commitText(marks[index],1);}
+                    else Toast.makeText(this,"ابتدا کادر نوشتن را انتخاب کنید.",Toast.LENGTH_SHORT).show();
+                    setInputView(buildKeyboard());
+                });
+                key.setTextSize(16*keyboardScale());
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),1);
+                lp.setMargins(dp(2),dp(2),dp(2),dp(2)); line.addView(key,lp);
+            }
+            list.addView(line);
+        }
+        scroll.addView(list,new ScrollView.LayoutParams(-1,-2));
+        panel.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        setInputView(panel);
     }
     void type(String s) {
         // UI-only pickers must open even if the current editor temporarily has no InputConnection.
@@ -152,8 +186,8 @@ public class FKKsMeInputMethodService extends InputMethodService {
             case "⌫": ic.deleteSurroundingText(1,0); return;
             case "Caps": caps=!caps; setInputView(buildKeyboard()); return;
             case "🌐 EN/فا": english=!english; setInputView(buildKeyboard()); return;
-            case "Enter": { int action=getCurrentInputEditorInfo()!=null ? (getCurrentInputEditorInfo().imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION) : 0; if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED) ic.performEditorAction(action); else ic.commitText("\n",1); return; }
-            case "Space": ic.commitText(" ",1); return;
+            case "Enter": { int action=getCurrentInputEditorInfo()!=null ? (getCurrentInputEditorInfo().imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION) : 0; if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED) ic.performEditorAction(action); else ic.commitText("\n",1); refreshSuggestions(); return; }
+            case "Space": ic.commitText(" ",1); refreshSuggestions(); return;
             case "Paste": ic.performContextMenuAction(android.R.id.paste); return;
             case "Copy": ic.performContextMenuAction(android.R.id.copy); return;
             case "Select": ic.performContextMenuAction(android.R.id.selectAll); return;
@@ -173,6 +207,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
         }
         ic.commitText(s,1);
         undoStack.push(s); redoStack.clear();
+        refreshSuggestions();
     }
 
     void undoLast(){
@@ -370,53 +405,103 @@ public class FKKsMeInputMethodService extends InputMethodService {
         double factor(){if(p<s.length()&&(s.charAt(p)=='+'||s.charAt(p)=='-')){char c=s.charAt(p++);double v=factor();return c=='-'?-v:v;} if(p<s.length()&&s.charAt(p)=='('){p++;double v=expr();if(p>=s.length()||s.charAt(p++)!=')')throw new IllegalArgumentException();return v;}int start=p;while(p<s.length()&&(Character.isDigit(s.charAt(p))||s.charAt(p)=='.'))p++;if(start==p)throw new IllegalArgumentException();return Double.parseDouble(s.substring(start,p));}
     }
     void showEmojiPicker(){
-        final String[] emojis={
-            // Faces and feelings (1-12)
-            "😀","😂","🥰","😍","😎","😭","😡","🤔","😴","😊","😉","🤗",
-            // People, hands and gestures (13-22)
-            "👍","👎","👏","🙏","🤝","👋","👌","✌️","💪","🫶",
-            // Hearts and celebration (23-30)
-            "❤️","🧡","💛","💚","💙","💜","💔","🎉",
-            // Animals and nature (31-38)
-            "🐱","🐶","🐼","🦁","🐸","🦋","🌹","🌻",
-            // Food and drink (39-44)
-            "🍎","🍕","🍔","🍟","🍰","☕",
-            // Travel and places (45-49)
-            "🚗","✈️","🚀","🏠","🌍",
-            // Activities and objects (50-55)
-            "⚽","🏀","🎮","🎵","📱","💡",
-            // Common signs and flags (56-60)
-            "🔥","✨","✅","❌","🏳️"
+        // Ten frequently used emoji in each clearly separated category.
+        final String[][] groups = {
+            {"😀","😂","😊","😍","🥰","😭","😎","🤔","😡","🙏"},
+            {"👋","👍","👎","👏","🙌","🙏","🤝","👌","✌️","💪"},
+            {"❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","💕"},
+            {"🐶","🐱","🐼","🐻","🦁","🐸","🐵","🐰","🦊","🐯"},
+            {"🍎","🍌","🍉","🍓","🍕","🍔","🍟","🍰","🍫","☕"},
+            {"🚗","🚕","🚌","🚲","✈️","🚀","🚆","🏠","🌍","🏖️"},
+            {"⚽","🏀","🏈","🎾","🎮","🎯","🎵","🎸","🎬","🏆"},
+            {"📱","💻","⌚","📷","💡","🔑","📚","✉️","🎁","🔔"},
+            {"🌞","🌙","⭐","☀️","☁️","🌈","🌹","🌻","🌳","🔥"},
+            {"✅","❌","⚠️","❓","❗","💯","✨","🎉","🎊","🏳️"}
         };
-        showCharacterPicker("انتخاب ایموجی (۶۰ مورد)", emojis, true);
+        final String[] names = {"چهره‌ها","دست و افراد","قلب‌ها","حیوانات","خوراکی","سفر","ورزش و سرگرمی","وسایل","طبیعت","نشانه‌ها"};
+        showGroupedCharacterPicker("ایموجی‌ها", names, groups, true);
     }
 
     void restoreKeyboardInPlace(LinearLayout displayRoot) {
-        // Replace the InputMethodService input view itself. Mutating the old root
-        // can leave the IME window displaying a stale/empty hierarchy on Android.
         View keyboard = buildKeyboard();
         setInputView(keyboard);
     }
 
     void showSymbolPicker(){
         final String[] symbols={
-            // Punctuation and common keyboard symbols (1-20)
+            // Common punctuation
             "!","?","؟","،","؛",".",",",":",";","…","'","\"","`","~","@","#","$","%","^","&",
-            // Operators and brackets (21-40)
+            // Operators, brackets and math
             "*","-","_","+","=","/","\\","|","<",">","(",")","[","]","{","}","٫","٬","×","÷",
-            // Currency and units (41-50)
-            "€","$","£","¥","₹","₽","₺","₩","¢","°",
-            // Legal, typographic and marks (51-60)
-            "©","®","™","§","¶","†","‡","•","※","‰",
-            // Arrows and status symbols (61-70)
-            "←","→","↑","↓","↔","↕","✓","✔","✗","★"
+            // Currency, units, typography
+            "€","£","¥","₹","₽","₺","₩","¢","°","©","®","™","§","¶","†","‡","•","※","‰","√",
+            // Arrows, checks, geometry and extra 40 symbols
+            "←","→","↑","↓","↔","↕","✓","✔","✗","★",
+            "☆","◆","◇","■","□","●","○","▲","△","▼",
+            "▽","♦","♣","♠","♥","♪","♫","∞","≠","≤",
+            "≥","≈","±","÷","×","∑","∏","∫","∴","∵",
+            "↗","↘","↙","↖","⇐","⇒","⇑","⇓","⇔","↻"
         };
-        showCharacterPicker("انتخاب علامت (۷۰ مورد)", symbols, false);
+        showCharacterPicker("علامت‌ها (۱۱۰ مورد)", symbols, false);
     }
 
-    // In-place, scrollable character panel: works within the active IME view and
-    // avoids a modal dialog stealing focus from the text editor.
+    // Scrollable panel stays inside the keyboard window; no large modal picker.
     void showCharacterPicker(String titleText, String[] characters, boolean emojiMode){
+        showCharacterGrid(titleText, characters, emojiMode);
+    }
+
+    void showGroupedCharacterPicker(String titleText, String[] groupNames, String[][] groups, boolean emojiMode){
+        final InputConnection openingConnection = getCurrentInputConnection();
+        if (root == null) {
+            Toast.makeText(this, "کیبورد آماده نیست؛ دوباره تلاش کنید.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(3), dp(3), dp(3), dp(3));
+        panel.setBackgroundColor(bg);
+
+        LinearLayout heading = row();
+        TextView title = button(titleText, Color.rgb(250,249,242), null);
+        title.setTextSize(15 * keyboardScale());
+        heading.addView(title, new LinearLayout.LayoutParams(0, dp(36), 1));
+        TextView close = button("✕ بازگشت", Color.rgb(250,220,225), () -> setInputView(buildKeyboard()));
+        close.setTextSize(13 * keyboardScale());
+        heading.addView(close, new LinearLayout.LayoutParams(dp(94), dp(36)));
+        panel.addView(heading);
+
+        HorizontalScrollView categoryScroll = new HorizontalScrollView(this);
+        categoryScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout categoryRow = new LinearLayout(this);
+        categoryRow.setOrientation(LinearLayout.HORIZONTAL);
+        categoryScroll.addView(categoryRow);
+        panel.addView(categoryScroll, new LinearLayout.LayoutParams(-1, dp(42)));
+
+        FrameLayout content = new FrameLayout(this);
+        panel.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        final TextView[] activeButton = new TextView[1];
+        for (int i=0; i<groupNames.length; i++) {
+            final int groupIndex=i;
+            TextView tab=button(groupNames[i], Color.rgb(225,239,250), () -> {
+                if(activeButton[0]!=null) activeButton[0].setBackground(shape(Color.rgb(225,239,250)));
+                activeButton[0]= (TextView)((View)((LinearLayout)categoryRow).getChildAt(groupIndex));
+                activeButton[0].setBackground(shape(Color.rgb(190,230,202)));
+                populateCharacterGrid(content, groups[groupIndex], emojiMode, openingConnection);
+            });
+            tab.setTextSize(12 * keyboardScale());
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2, dp(36));
+            lp.setMargins(dp(2),dp(2),dp(2),dp(2));
+            categoryRow.addView(tab,lp);
+        }
+        if(categoryRow.getChildCount()>0) {
+            activeButton[0]=(TextView)categoryRow.getChildAt(0);
+            activeButton[0].setBackground(shape(Color.rgb(190,230,202)));
+            populateCharacterGrid(content, groups[0], emojiMode, openingConnection);
+        }
+        setInputView(panel);
+    }
+
+    void showCharacterGrid(String titleText, String[] characters, boolean emojiMode) {
         final InputConnection openingConnection = getCurrentInputConnection();
         if (root == null) {
             Toast.makeText(this, "کیبورد آماده نیست؛ دوباره تلاش کنید.", Toast.LENGTH_SHORT).show();
@@ -426,7 +511,6 @@ public class FKKsMeInputMethodService extends InputMethodService {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(4), dp(4), dp(4), dp(4));
         panel.setBackgroundColor(bg);
-
         LinearLayout heading = row();
         TextView title = button(titleText, Color.rgb(250,249,242), null);
         title.setTextSize(15 * keyboardScale());
@@ -435,7 +519,13 @@ public class FKKsMeInputMethodService extends InputMethodService {
         close.setTextSize(14 * keyboardScale());
         heading.addView(close, new LinearLayout.LayoutParams(dp(100), dp(40)));
         panel.addView(heading);
+        FrameLayout content = new FrameLayout(this);
+        panel.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        populateCharacterGrid(content, characters, emojiMode, openingConnection);
+        setInputView(panel);
+    }
 
+    void populateCharacterGrid(FrameLayout content, String[] characters, boolean emojiMode, InputConnection openingConnection) {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(false);
         LinearLayout list = new LinearLayout(this);
@@ -470,11 +560,62 @@ public class FKKsMeInputMethodService extends InputMethodService {
             list.addView(line);
         }
         scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
-        panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        // Install the picker as the actual IME input view. This avoids relying on
-        // stale root references and makes the Symbols button use the same reliable
-        // path as Emoji, including the return-to-keyboard action.
-        setInputView(panel);
+        content.removeAllViews();
+        content.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    String currentWordPrefix() {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return "";
+        CharSequence before = ic.getTextBeforeCursor(100, 0);
+        if (before == null || before.length() == 0) return "";
+        int start = before.length();
+        while (start > 0) {
+            char c = before.charAt(start - 1);
+            if (Character.isWhitespace(c) || "،؛,.!?؟:;()[]{}<>\"'`/\\|=+-_*".indexOf(c) >= 0) break;
+            start--;
+        }
+        return before.subSequence(start, before.length()).toString();
+    }
+
+    void refreshSuggestions() {
+        if (suggestionRow == null) return;
+        suggestionRow.removeAllViews();
+        String prefix = currentWordPrefix();
+        ArrayList<String> matches = new ArrayList<>();
+        if (prefix.isEmpty()) {
+            String[] common = {"پروژه", "درست", "بررسی", "کلمات"};
+            matches.addAll(Arrays.asList(common));
+        } else {
+            for (String word : suggestionDictionary) {
+                if (word.startsWith(prefix) && !word.equals(prefix) && !matches.contains(word)) {
+                    matches.add(word);
+                    if (matches.size() >= 4) break;
+                }
+            }
+            if (matches.isEmpty()) {
+                TextView empty = button("پیشنهاد واژه", Color.rgb(250,249,242), null);
+                empty.setTextSize(11 * keyboardScale());
+                suggestionRow.addView(empty, new LinearLayout.LayoutParams(-1, -1));
+                return;
+            }
+        }
+        for (String word : matches) {
+            TextView item = button(word, Color.rgb(225,239,250), () -> {
+                InputConnection ic = getCurrentInputConnection();
+                if (ic == null) return;
+                String prefixNow = currentWordPrefix();
+                if (!prefixNow.isEmpty()) ic.deleteSurroundingText(prefixNow.length(), 0);
+                ic.commitText(word, 1);
+                undoStack.push(word);
+                redoStack.clear();
+                refreshSuggestions();
+            });
+            item.setTextSize(12 * keyboardScale());
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(30), 1);
+            lp.setMargins(dp(1), 0, dp(1), 0);
+            suggestionRow.addView(item, lp);
+        }
     }
 
     View numberKey(String label, float weight, int color){
@@ -498,6 +639,9 @@ public class FKKsMeInputMethodService extends InputMethodService {
         String[] tools={"Paste","Copy","Copy\nScreen","Select","Undo","Redo","8\nHistory","Tool","Muse","Resize"};
         for(String s:tools){TextView t=button(s,Color.rgb(250,249,242),()->type(s.equals("8\nHistory")?"History":s.replace("\n"," "))); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(43),1);lp.setMargins(dp(1),0,dp(1),0);top.addView(t,lp);}
         root.addView(top);
+        suggestionRow = row();
+        root.addView(suggestionRow, new LinearLayout.LayoutParams(-1, dp(30)));
+        refreshSuggestions();
         LinearLayout nav=row();
         for(int i=0;i<5;i++){TextView blank=button("",bg,null);nav.addView(blank,new LinearLayout.LayoutParams(0,dp(34),1));}
         TextView up=button("↑",bg,()->type("↑")); TextView down=button("↓",bg,()->type("↓")); nav.addView(up,new LinearLayout.LayoutParams(0,dp(34),0.5f));nav.addView(down,new LinearLayout.LayoutParams(0,dp(34),0.5f));
