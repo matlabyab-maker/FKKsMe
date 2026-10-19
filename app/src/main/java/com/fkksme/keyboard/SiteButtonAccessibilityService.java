@@ -3,6 +3,11 @@ package com.fkksme.keyboard;
 import android.accessibilityservice.AccessibilityService;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.accessibilityservice.GestureDescription;
+import android.graphics.Path;
+import android.graphics.Point;
+import android.view.WindowManager;
+import android.util.DisplayMetrics;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -16,6 +21,40 @@ public class SiteButtonAccessibilityService extends AccessibilityService {
     @Override public void onDestroy() { if(instance==this) instance=null; super.onDestroy(); }
 
     public static boolean isEnabled() { return instance != null; }
+
+    /** Sends a real screen-level touch gesture. Requires this accessibility service enabled. */
+    public static boolean performTouchGesture(float fromX, float fromY, float toX, float toY, long durationMs) {
+        SiteButtonAccessibilityService s = instance;
+        if (s == null) return false;
+        try {
+            Path path = new Path();
+            path.moveTo(fromX, fromY);
+            path.lineTo(toX, toY);
+            GestureDescription.StrokeDescription stroke = new GestureDescription.StrokeDescription(path, 0, Math.max(40, durationMs));
+            GestureDescription gesture = new GestureDescription.Builder().addStroke(stroke).build();
+            return s.dispatchGesture(gesture, null, null);
+        } catch (Exception e) { return false; }
+    }
+
+    public static boolean tapScreen(float x, float y) {
+        SiteButtonAccessibilityService s = instance;
+        if (s == null) return false;
+        try {
+            Path path = new Path(); path.moveTo(x, y);
+            GestureDescription gesture = new GestureDescription.Builder()
+                .addStroke(new GestureDescription.StrokeDescription(path, 0, 90)).build();
+            return s.dispatchGesture(gesture, null, null);
+        } catch (Exception e) { return false; }
+    }
+
+    public static int[] screenSize() {
+        SiteButtonAccessibilityService s = instance;
+        if (s == null) return new int[]{0, 0};
+        try {
+            DisplayMetrics dm = s.getResources().getDisplayMetrics();
+            return new int[]{dm.widthPixels, dm.heightPixels};
+        } catch (Exception e) { return new int[]{0, 0}; }
+    }
     public static boolean clickWebsiteControl(boolean upload) {
         SiteButtonAccessibilityService s=instance;
         if(s==null) return false;
