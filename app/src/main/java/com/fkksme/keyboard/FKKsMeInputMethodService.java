@@ -136,9 +136,16 @@ public class FKKsMeInputMethodService extends InputMethodService {
         }
     }
     void showDiacritics(){
-        String[] names={"َ  ـَ  فتحه","ِ  ـِ  کسره","ُ  ـُ  ضمه","ْ  ـْ  سکون","ّ  ـّ  تشدید","ً  ـً  تنوین فتح","ٍ  ـٍ  تنوین کسر","ٌ  ـٌ  تنوین ضم","ٰ  الف خنجری","ٓ  مدّ","ٔ  همزه بالا","ٕ  همزه پایین"};
+        // Show each combining mark attached to a sample Arabic letter so the
+        // choices remain visible; insert only the selected mark into the editor.
+        String[] names={"بَ  ـَ  فتحه","بِ  ـِ  کسره","بُ  ـُ  ضمه","بْ  ـْ  سکون","بّ  ـّ  تشدید","بً  ـً  تنوین فتح","بٍ  ـٍ  تنوین کسر","بٌ  ـٌ  تنوین ضم","بٰ  الف خنجری","بٓ  مدّ","بٔ  همزه بالا","بٕ  همزه پایین"};
         String[] marks={"\u064e","\u0650","\u064f","\u0652","\u0651","\u064b","\u064d","\u064c","\u0670","\u0653","\u0654","\u0655"};
-        new AlertDialog.Builder(this).setTitle("حرکات کوتاه عربی").setItems(names,(d,w)->{InputConnection ic=getCurrentInputConnection();if(ic!=null)ic.commitText(marks[w],1);}).setNegativeButton("بستن",null).show();
+        new AlertDialog.Builder(this).setTitle("اعراب — برای درج انتخاب کن")
+            .setItems(names,(d,w)->{
+                InputConnection ic=getCurrentInputConnection();
+                if(ic!=null){ ic.commitText(marks[w],1); }
+                else Toast.makeText(this,"ابتدا داخل کادر متن را لمس کن",Toast.LENGTH_SHORT).show();
+            }).setNegativeButton("بستن",null).show();
     }
     void type(String s) {
         // UI-only pickers must open even if the current editor temporarily has no InputConnection.
@@ -299,25 +306,25 @@ public class FKKsMeInputMethodService extends InputMethodService {
             }
             return;
         }
-        // If the optional accessibility helper is enabled, click the actual visible
-        // Send/Submit button in the host app (including browser chat pages).
+
+        // First try to click the actual Send/Submit control in the host app.
+        // Never emulate Enter: on many chat sites that only inserts a newline.
         if (SiteButtonAccessibilityService.clickWebsiteControl(false)) return;
+
         InputConnection ic=getCurrentInputConnection();
         android.view.inputmethod.EditorInfo info=getCurrentInputEditorInfo();
-        if(ic==null){ Toast.makeText(this,"کادر ورودی فعالی پیدا نشد",Toast.LENGTH_SHORT).show(); return; }
-        int action=info==null?0:(info.imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION);
-        // Prefer the editor's declared submit action. Do not fall back to Enter,
-        // because in chat sites Enter may insert a newline rather than send.
-        if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEND ||
-            action == android.view.inputmethod.EditorInfo.IME_ACTION_GO ||
-            action == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
-            action == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
-            boolean done = ic.performEditorAction(action);
-            if (!done) Toast.makeText(this,"ویرایشگر سایت فرمان ارسال را نپذیرفت؛ دکمهٔ ارسال خود سایت را لمس کنید.",Toast.LENGTH_LONG).show();
-        } else {
-            boolean done = ic.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEND);
-            if (!done) Toast.makeText(this,"این سایت فرمان ارسال را از کیبورد نمی‌پذیرد؛ برای ارسال، دکمهٔ خود سایت لازم است.",Toast.LENGTH_LONG).show();
+        if(ic==null){
+            Toast.makeText(this,"کادر ورودی فعالی پیدا نشد",Toast.LENGTH_SHORT).show();
+            return;
         }
+        int action=info==null?0:(info.imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION);
+        if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEND){
+            if(!ic.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEND)){
+                Toast.makeText(this,"ارسال توسط ویرایشگر انجام نشد؛ دکمهٔ ارسال خود سایت را لمس کن.",Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+        Toast.makeText(this,"دکمهٔ ارسال سایت پیدا نشد. برای ارسال واقعی، دکمهٔ Send/ارسال خود سایت باید قابل دسترسی باشد؛ این دکمه اینتر یا خط جدید نمی‌فرستد.",Toast.LENGTH_LONG).show();
     }
     void showMuse(){
         final int[] size=SiteButtonAccessibilityService.screenSize();
@@ -574,7 +581,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
             : new String[]{"! ۱","@ ۲","# ۳","$ ۴","% ۵","^ ۶","& ۷","* ۸","( ۹",") ۰"};
         for(String n:ns){ View nk=numberKey(n,0.95f,bg); LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(0,dp(48),0.95f); nlp.setMargins(dp(1),dp(1),dp(1),dp(1)); nums.addView(nk,nlp); }
         addKey(nums,"⌫",1.55f,Color.rgb(250,220,225));root.addView(nums);
-        String[][] rows= english ? new String[][]{{caps?"Q":"q",caps?"W":"w",caps?"E":"e",caps?"R":"r",caps?"T":"t",caps?"Y":"y",caps?"U":"u",caps?"I":"i",caps?"O":"o",caps?"P":"p"},{caps?"A":"a",caps?"S":"s",caps?"D":"d",caps?"F":"f",caps?"G":"g",caps?"H":"h",caps?"J":"j",caps?"K":"k",caps?"L":"l"},{"Caps",caps?"Z":"z",caps?"X":"x",caps?"C":"c",caps?"V":"v",caps?"B":"b",caps?"N":"n",caps?"M":"m",",",".","Enter"}} : new String[][]{{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","Enter"}};
+        String[][] rows= english ? new String[][]{{caps?"Q":"q",caps?"W":"w",caps?"E":"e",caps?"R":"r",caps?"T":"t",caps?"Y":"y",caps?"U":"u",caps?"I":"i",caps?"O":"o",caps?"P":"p"},{caps?"A":"a",caps?"S":"s",caps?"D":"d",caps?"F":"f",caps?"G":"g",caps?"H":"h",caps?"J":"j",caps?"K":"k",caps?"L":"l"},{"Caps",caps?"Z":"z",caps?"X":"x",caps?"C":"c",caps?"V":"v",caps?"B":"b",caps?"N":"n",caps?"M":"m",",",".","Enter"}} : new String[][]{{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"Caps","ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","Enter"}};
         for(int ri=0;ri<rows.length;ri++){LinearLayout r=row();for(String k:rows[ri]){ if(k.equals("Caps")){ addKey(r,k,1.15f,bg); } else if(k.equals("Enter")){ addKey(r,k,2.15f,Color.rgb(210,229,250)); } else addKey(r,k,1,bg); }root.addView(r);}
         LinearLayout bottom=row();
         String[] b={"😀","علامت","اعراب","🌐 EN/فا","Space","،",".","؟","←","→","↑","↓","=","-","[","}"};
