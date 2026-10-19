@@ -97,6 +97,8 @@ public class FKKsMeInputMethodService extends InputMethodService {
     final ArrayDeque<String> undoStack = new ArrayDeque<>();
     final ArrayDeque<String> redoStack = new ArrayDeque<>();
     boolean caps=false;
+    boolean capsLocked=false;
+    long lastCapsTap=0L;
     boolean english=false;
     // Resize cycle: normal -> 75% -> 50% -> normal.
     int resizeLevel=0;
@@ -118,13 +120,14 @@ public class FKKsMeInputMethodService extends InputMethodService {
     }
     void addKey(LinearLayout r,String label,float weight,int color) {
         TextView t=button(label,color,()->{
-            if(label.equals("Caps")){ caps=!caps; setInputView(buildKeyboard()); return; }
+            if(label.equals("Caps")){ handleCapsTap(); return; }
             if(label.equals("اعراب")){ showDiacritics(); return; }
             type(english && caps && label.length()==1 ? label.toUpperCase(Locale.ROOT) : label);
+            if (english && caps && !capsLocked && label.length()==1 && Character.isLetter(label.charAt(0))) { caps=false; setInputView(buildKeyboard()); }
         });
         t.setTextSize((label.length()>2?13:25)*keyboardScale());
         t.setTypeface(Typeface.DEFAULT);
-        if(label.equals("Caps") && caps) t.setBackground(shape(Color.rgb(255,242,176)));
+        if(label.equals("Caps") && caps) t.setBackground(shape(capsLocked ? Color.rgb(255,210,120) : Color.rgb(255,242,176)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),weight); lp.setMargins(dp(1),dp(1),dp(1),dp(1)); r.addView(t,lp);
         if ("ایکوو".contains(label) && label.length()==1) t.setOnLongClickListener(v->{showVariants(label); return true;});
         if (label.equals("⌫")) {
@@ -134,6 +137,13 @@ public class FKKsMeInputMethodService extends InputMethodService {
                 return false;
             });
         }
+    }
+    void handleCapsTap(){
+        long now=android.os.SystemClock.uptimeMillis();
+        if (capsLocked) { capsLocked=false; caps=false; lastCapsTap=0L; }
+        else if (caps && now-lastCapsTap<=400) { capsLocked=true; caps=true; lastCapsTap=0L; }
+        else { caps=true; lastCapsTap=now; }
+        setInputView(buildKeyboard());
     }
     void showDiacritics(){
         String[] names={"َ  ـَ  فتحه","ِ  ـِ  کسره","ُ  ـُ  ضمه","ْ  ـْ  سکون","ّ  ـّ  تشدید","ً  ـً  تنوین فتح","ٍ  ـٍ  تنوین کسر","ٌ  ـٌ  تنوین ضم","ٰ  الف خنجری","ٓ  مدّ","ٔ  همزه بالا","ٕ  همزه پایین"};
@@ -156,7 +166,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
         InputConnection ic=getCurrentInputConnection(); if(ic==null)return;
         switch(s){
             case "⌫": ic.deleteSurroundingText(1,0); return;
-            case "Caps": caps=!caps; setInputView(buildKeyboard()); return;
+            case "Caps": handleCapsTap(); return;
             case "🌐 EN/فا": english=!english; setInputView(buildKeyboard()); return;
             case "Enter": { int action=getCurrentInputEditorInfo()!=null ? (getCurrentInputEditorInfo().imeOptions & android.view.inputmethod.EditorInfo.IME_MASK_ACTION) : 0; if(action!=0 && action!=android.view.inputmethod.EditorInfo.IME_ACTION_NONE && action!=android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED) ic.performEditorAction(action); else ic.commitText("\n",1); return; }
             case "Space": ic.commitText(" ",1); return;
@@ -297,6 +307,11 @@ public class FKKsMeInputMethodService extends InputMethodService {
             }
             return;
         }
+        // First try the actual visible Send button on the host page. This requires
+        // the optional accessibility helper to be enabled by the user; it does not
+        // require broad storage permission. The old implementation never called
+        // this helper, so it only sent an editor action (often behaving like Enter).
+        if (SiteButtonAccessibilityService.clickWebsiteControl(false)) return;
         InputConnection ic=getCurrentInputConnection();
         android.view.inputmethod.EditorInfo info=getCurrentInputEditorInfo();
         if(ic==null){ Toast.makeText(this,"کادر ورودی فعالی پیدا نشد",Toast.LENGTH_SHORT).show(); return; }
@@ -511,7 +526,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
             : new String[]{"! ۱","@ ۲","# ۳","$ ۴","% ۵","^ ۶","& ۷","* ۸","( ۹",") ۰"};
         for(String n:ns){ View nk=numberKey(n,0.95f,bg); LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(0,dp(48),0.95f); nlp.setMargins(dp(1),dp(1),dp(1),dp(1)); nums.addView(nk,nlp); }
         addKey(nums,"⌫",1.55f,Color.rgb(250,220,225));root.addView(nums);
-        String[][] rows= english ? new String[][]{{caps?"Q":"q",caps?"W":"w",caps?"E":"e",caps?"R":"r",caps?"T":"t",caps?"Y":"y",caps?"U":"u",caps?"I":"i",caps?"O":"o",caps?"P":"p"},{caps?"A":"a",caps?"S":"s",caps?"D":"d",caps?"F":"f",caps?"G":"g",caps?"H":"h",caps?"J":"j",caps?"K":"k",caps?"L":"l"},{"Caps",caps?"Z":"z",caps?"X":"x",caps?"C":"c",caps?"V":"v",caps?"B":"b",caps?"N":"n",caps?"M":"m",",",".","Enter"}} : new String[][]{{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"Caps","ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","Enter"}};
+        String[][] rows= english ? new String[][]{{caps?"Q":"q",caps?"W":"w",caps?"E":"e",caps?"R":"r",caps?"T":"t",caps?"Y":"y",caps?"U":"u",caps?"I":"i",caps?"O":"o",caps?"P":"p"},{caps?"A":"a",caps?"S":"s",caps?"D":"d",caps?"F":"f",caps?"G":"g",caps?"H":"h",caps?"J":"j",caps?"K":"k",caps?"L":"l"},{"Caps",caps?"Z":"z",caps?"X":"x",caps?"C":"c",caps?"V":"v",caps?"B":"b",caps?"N":"n",caps?"M":"m",",",".","Enter"}} : new String[][]{{"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},{"Caps","ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},{"ظ","ط","ژ","ز","ر","ذ","د","پ","و","چ","Enter"}};
         for(int ri=0;ri<rows.length;ri++){LinearLayout r=row();for(String k:rows[ri]){ if(k.equals("Caps")){ addKey(r,k,1.15f,bg); } else if(k.equals("Enter")){ addKey(r,k,2.15f,Color.rgb(210,229,250)); } else addKey(r,k,1,bg); }root.addView(r);}
         LinearLayout bottom=row();
         String[] b={"😀","علامت","اعراب","🌐 EN/فا","Space","،",".","؟","←","→","↑","↓","=","-","["};
