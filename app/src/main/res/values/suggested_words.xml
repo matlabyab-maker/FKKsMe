@@ -108,17 +108,4 @@
         <item>عکس‌بده</item>
         <item>پیشنهادی</item>
     </string-array>
-
-    <string-array name="suggested_phrases_fa">
-        <item>این پروژه را ادامه بدهیم</item>
-        <item>پروژه را اصلاح کن و اصلاح شده‌اش را بیار دانلود</item>
-        <item>درستش کن</item>
-        <item>خطاها را بررسی و پروژه اصلاح شده را بیار دانلود</item>
-        <item>عکسش را بده</item>
-        <item>همه را بررسی و اصلاح کن</item>
-        <item>پروژه بده</item>
-        <item>حالا چه ؟</item>
-        <item>ادامه بده</item>
-        <item>باز هم خطا داد</item>
-    </string-array>
 </resources>

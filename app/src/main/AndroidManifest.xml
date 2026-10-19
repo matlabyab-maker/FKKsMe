@@ -4,13 +4,6 @@
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity>
         <activity android:name=".FilePickerActivity" android:exported="false" />
-        <service android:name=".SiteButtonAccessibilityService"
-            android:label="FKKsMe — ارسال و دکمه‌های سایت"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false">
-            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
-            <meta-data android:name="android.accessibilityservice" android:resource="@xml/site_button_accessibility"/>
-        </service>
         <service android:name=".FKKsMeInputMethodService" android:label="FKKsMe" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true">
             <intent-filter><action android:name="android.view.InputMethod"/></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/method"/>
