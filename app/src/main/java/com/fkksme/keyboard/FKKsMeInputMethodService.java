@@ -159,7 +159,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
         }
         // Open keyboard tools before checking whether a text field is focused.
         switch(s){
-            case "Tool": showCalculator(); return;
+            case "Tool": showToolMenu(); return;
             case "Muse": showMuse(); return;
             case "Resize": resizeLevel=(resizeLevel+1)%3; setInputView(buildKeyboard()); Toast.makeText(this, resizeLevel==1?"اندازهٔ کیبورد: ۷۵٪":resizeLevel==2?"اندازهٔ کیبورد: ۵۰٪":"اندازهٔ عادی",Toast.LENGTH_SHORT).show(); return;
         }
@@ -241,6 +241,14 @@ public class FKKsMeInputMethodService extends InputMethodService {
         ScrollView scroll=new ScrollView(this); scroll.addView(choices);
         new AlertDialog.Builder(this).setTitle("زیرگونه‌های «"+key+"» — یکی را انتخاب کنید").setView(scroll).setNegativeButton("بستن",null).show();
     }
+    // Tool hub: calculator and Muse touchpad are both reachable from Tool.
+    void showToolMenu(){
+        final String[] options={"🧮 ماشین‌حساب", "🖱️ موس لمسی (Muse)"};
+        new AlertDialog.Builder(this).setTitle("ابزارها — Tool")
+            .setItems(options,(dialog,which)->{ if(which==0) showCalculator(); else showMuse(); })
+            .setNegativeButton("بستن",null).show();
+    }
+
     void showCalculator(){
         // A working calculator opened directly by the top-row Tool button.
         LinearLayout box=new LinearLayout(this);
@@ -333,19 +341,19 @@ public class FKKsMeInputMethodService extends InputMethodService {
         final int panelBg=Color.rgb(245,246,250);
         LinearLayout panel=new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(2),dp(2),dp(2),dp(2)); panel.setBackgroundColor(panelBg);
         TextView pad=new TextView(this);
-        pad.setText("میدان لمسی\nحرکت نشانگر\n\nTouchpad for Cursor Movement"); pad.setTextSize(17); pad.setGravity(Gravity.CENTER);
+        pad.setText("☝\nمیدان لمسی\nبرای حرکت نشانگر انگشت خود را روی این صفحه حرکت دهید\nTouchpad for Cursor Movement"); pad.setTextSize(17); pad.setGravity(Gravity.CENTER);
         pad.setTextColor(Color.rgb(105,111,127)); pad.setBackground(shape(Color.rgb(238,240,247)));
         panel.addView(pad,new LinearLayout.LayoutParams(-1,dp(150)));
         LinearLayout actions=row();
-        TextView left=button("کلیک چپ\nLeft Click",Color.rgb(159,215,233),()->{
+        TextView left=button("↖\nکلیک چپ\nLeft Click",Color.rgb(80,196,239),()->{
             InputConnection ic=getCurrentInputConnection();
             if(ic!=null){ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_DPAD_CENTER));ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_DPAD_CENTER));}
         });
         final boolean[] dragging={false};
-        TextView drag=button("Drag",Color.rgb(250,238,186),()->{});
+        TextView drag=button("▣\nDrag",Color.rgb(250,238,186),()->{});
         final int[] sensitivity={1};
-        TextView zoom=button("Point\nZoom 1×",Color.rgb(234,176,226),()->{});
-        TextView close=button("Close",Color.rgb(244,137,95),()->{});
+        TextView zoom=button("⊕\nPoint Zoom 1×",Color.rgb(234,176,226),()->{});
+        TextView close=button("✕\nبستن\nClose",Color.rgb(244,137,95),()->{});
         for(TextView t:new TextView[]{left,drag,zoom,close}){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(54),1);lp.setMargins(dp(1),0,dp(1),0);actions.addView(t,lp);}
         panel.addView(actions);
         drag.setOnClickListener(v->{dragging[0]=!dragging[0];drag.setText(dragging[0]?"Drag: ON":"Drag");drag.setBackground(shape(dragging[0]?Color.rgb(235,195,94):Color.rgb(250,238,186)));});
