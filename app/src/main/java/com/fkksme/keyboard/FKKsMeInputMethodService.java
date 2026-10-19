@@ -24,7 +24,9 @@ import org.json.JSONException;
 public class FKKsMeInputMethodService extends InputMethodService {
     static FKKsMeInputMethodService activeService;
     LinearLayout root, keyArea, suggestionRow;
+    HorizontalScrollView suggestionScroll;
     String[] suggestionDictionary = new String[0];
+    String[] suggestionPhrases = new String[0];
     ArrayList<String> clipboardHistory = new ArrayList<>();
     ClipboardManager clipboardManager;
     ClipboardManager.OnPrimaryClipChangedListener clipboardListener;
@@ -36,6 +38,7 @@ public class FKKsMeInputMethodService extends InputMethodService {
         activeService=this;
         loadClipboardHistory();
         try { suggestionDictionary = getResources().getStringArray(R.array.suggested_words_fa); } catch (Exception ignored) { suggestionDictionary = new String[0]; }
+        try { suggestionPhrases = getResources().getStringArray(R.array.suggested_phrases_fa); } catch (Exception ignored) { suggestionPhrases = new String[0]; }
         clipboardManager = (ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
         clipboardListener = () -> captureClipboard();
         if (clipboardManager != null) clipboardManager.addPrimaryClipChangedListener(clipboardListener);
@@ -583,9 +586,10 @@ public class FKKsMeInputMethodService extends InputMethodService {
         suggestionRow.removeAllViews();
         String prefix = currentWordPrefix();
         ArrayList<String> matches = new ArrayList<>();
-        if (prefix.isEmpty()) {
-            String[] common = {"پروژه", "درست", "بررسی", "کلمات"};
-            matches.addAll(Arrays.asList(common));
+        boolean phraseMode = prefix.isEmpty();
+        if (phraseMode) {
+            // Complete sentence suggestions are shown when no partial word is being typed.
+            matches.addAll(Arrays.asList(suggestionPhrases));
         } else {
             for (String word : suggestionDictionary) {
                 if (word.startsWith(prefix) && !word.equals(prefix) && !matches.contains(word)) {
@@ -601,19 +605,22 @@ public class FKKsMeInputMethodService extends InputMethodService {
             }
         }
         for (String word : matches) {
+            final boolean insertPhrase = phraseMode;
             TextView item = button(word, Color.rgb(225,239,250), () -> {
                 InputConnection ic = getCurrentInputConnection();
                 if (ic == null) return;
-                String prefixNow = currentWordPrefix();
-                if (!prefixNow.isEmpty()) ic.deleteSurroundingText(prefixNow.length(), 0);
+                if (!insertPhrase) {
+                    String prefixNow = currentWordPrefix();
+                    if (!prefixNow.isEmpty()) ic.deleteSurroundingText(prefixNow.length(), 0);
+                }
                 ic.commitText(word, 1);
                 undoStack.push(word);
                 redoStack.clear();
                 refreshSuggestions();
             });
-            item.setTextSize(12 * keyboardScale());
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(30), 1);
-            lp.setMargins(dp(1), 0, dp(1), 0);
+            item.setTextSize((phraseMode ? 12 : 12) * keyboardScale());
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(phraseMode ? dp(210) : 0, dp(30), phraseMode ? 0 : 1);
+            lp.setMargins(dp(2), 0, dp(2), 0);
             suggestionRow.addView(item, lp);
         }
     }
@@ -639,8 +646,12 @@ public class FKKsMeInputMethodService extends InputMethodService {
         String[] tools={"Paste","Copy","Copy\nScreen","Select","Undo","Redo","8\nHistory","Tool","Muse","Resize"};
         for(String s:tools){TextView t=button(s,Color.rgb(250,249,242),()->type(s.equals("8\nHistory")?"History":s.replace("\n"," "))); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(43),1);lp.setMargins(dp(1),0,dp(1),0);top.addView(t,lp);}
         root.addView(top);
+        suggestionScroll = new HorizontalScrollView(this);
+        suggestionScroll.setHorizontalScrollBarEnabled(false);
+        suggestionScroll.setFillViewport(false);
         suggestionRow = row();
-        root.addView(suggestionRow, new LinearLayout.LayoutParams(-1, dp(30)));
+        suggestionScroll.addView(suggestionRow, new HorizontalScrollView.LayoutParams(-2, -1));
+        root.addView(suggestionScroll, new LinearLayout.LayoutParams(-1, dp(32)));
         refreshSuggestions();
         LinearLayout nav=row();
         for(int i=0;i<5;i++){TextView blank=button("",bg,null);nav.addView(blank,new LinearLayout.LayoutParams(0,dp(34),1));}
