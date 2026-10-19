@@ -147,6 +147,14 @@ public class FKKsMeInputMethodService extends InputMethodService {
             case "اعراب": case "Diacritics": showDiacritics(); return;
             case "علامت": case "علامتها": case "Symbols": showSymbolPicker(); return;
         }
+        // These controls belong to the keyboard UI and must work even if the
+        // current editor temporarily returns a null InputConnection.
+        switch(s) {
+            case "Tool": showCalculator(); return;
+            case "Muse": showMuse(); return;
+            case "History": case "8 History": case "8\\nHistory": showClipboardHistory(); return;
+            case "Resize": resizeLevel=(resizeLevel+1)%3; setInputView(buildKeyboard()); Toast.makeText(this, resizeLevel==1?"اندازهٔ کیبورد: ۷۵٪":resizeLevel==2?"اندازهٔ کیبورد: ۵۰٪":"اندازهٔ عادی",Toast.LENGTH_SHORT).show(); return;
+        }
         InputConnection ic=getCurrentInputConnection(); if(ic==null)return;
         switch(s){
             case "⌫": ic.deleteSurroundingText(1,0); return;
@@ -165,10 +173,6 @@ public class FKKsMeInputMethodService extends InputMethodService {
             case "↓": sendDpad(android.view.KeyEvent.KEYCODE_DPAD_DOWN); return;
             case "File": runWebsiteControl(true); return;
             case "Send": runWebsiteControl(false); return;
-            case "Tool": showCalculator(); return;
-            case "Muse": showMuse(); return;
-            case "Resize": resizeLevel=(resizeLevel+1)%3; setInputView(buildKeyboard()); Toast.makeText(this, resizeLevel==1?"اندازهٔ کیبورد: ۷۵٪":resizeLevel==2?"اندازهٔ کیبورد: ۵۰٪":"اندازهٔ عادی",Toast.LENGTH_SHORT).show(); return;
-            case "History": showClipboardHistory(); return;
             case "Copy Screen": Toast.makeText(this,"برای کپی، متن انتخاب‌شده را کپی کنید",Toast.LENGTH_SHORT).show(); return;
         }
         ic.commitText(s,1);
